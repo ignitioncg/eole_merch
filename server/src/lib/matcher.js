@@ -35,34 +35,30 @@ function levenshtein(a, b) {
     curr[0] = i;
     for (let j = 1; j <= b.length; j++) {
       const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      curr[j] = Math.min(
-        curr[j - 1] + 1,
-        prev[j] + 1,
-        prev[j - 1] + cost
-      );
+      curr[j] = Math.min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
     }
     [prev, curr] = [curr, prev];
   }
   return prev[b.length];
 }
 
-function findMatch(columnTitle, inventoryItems, { maxDistance = 2 } = {}) {
-  const target = normalise(columnTitle);
+function findMatch(needle, haystack, getName, { maxDistance = 2 } = {}) {
+  const target = normalise(needle);
   if (!target) return null;
 
-  const candidates = inventoryItems.map((item) => ({
-    item,
-    norm: normalise(item.name)
+  const candidates = haystack.map((entry) => ({
+    entry,
+    norm: normalise(getName(entry))
   }));
 
   const exact = candidates.find((c) => c.norm === target);
-  if (exact) return { item: exact.item, distance: 0, normalisedTitle: target, normalisedName: exact.norm };
+  if (exact) return { entry: exact.entry, distance: 0, normalisedNeedle: target, normalisedName: exact.norm };
 
   let best = null;
   for (const c of candidates) {
     const d = levenshtein(target, c.norm);
     if (d <= maxDistance && (best === null || d < best.distance)) {
-      best = { item: c.item, distance: d, normalisedTitle: target, normalisedName: c.norm };
+      best = { entry: c.entry, distance: d, normalisedNeedle: target, normalisedName: c.norm };
     }
   }
   return best;

@@ -1,5 +1,23 @@
+# dependencies
 node_modules/
+
+# build output
+client/dist/
+server/dist/
+
+# env / secrets
 .env
-.env.local
+.env.*
+!.env.example
+
+# logs
 *.log
+npm-debug.log*
+
+# editor / OS
 .DS_Store
+.idea/
+.vscode/
+
+# mapps
+.mappsrc

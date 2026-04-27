@@ -1,0 +1,44 @@
+{
+  "name": "EOLE Stock Catalog",
+  "description": "Catalog/portal UI for managing merchandise stock and placing orders. Mirrors to existing Inventory and Orders boards; writes a full audit trail to the Stock Movements board.",
+  "private": true,
+  "features": [
+    {
+      "type": "custom_object",
+      "name": "Stock Catalog",
+      "description": "Browse merchandise, place orders, and review stock movements.",
+      "build": {
+        "kind": "custom_url",
+        "url_template": "/index.html"
+      }
+    },
+    {
+      "type": "account_settings_view",
+      "name": "Stock Catalog — Settings",
+      "description": "Configure board IDs, column IDs, and behaviour for the Stock Catalog app.",
+      "build": {
+        "kind": "custom_url",
+        "url_template": "/index.html#/config"
+      }
+    }
+  ],
+  "scopes": [
+    "boards:read",
+    "boards:write",
+    "me:read",
+    "users:read",
+    "updates:write",
+    "webhooks:write"
+  ],
+  "monday_code": {
+    "entry": "server/src/index.js"
+  },
+  "webhooks": [
+    {
+      "name": "inventory_column_changed",
+      "event": "change_specific_column_value",
+      "board_setting": "INVENTORY_BOARD_ID",
+      "endpoint": "/webhooks/inventory"
+    }
+  ]
+}
