@@ -12,7 +12,7 @@
     "test": "node --test 'test/*.test.js'"
   },
   "dependencies": {
-    "@mondaycom/apps-sdk": "^3.0.0",
+    "@mondaycom/apps-sdk": "3.0.10",
     "express": "^4.19.2",
     "ulid": "^2.3.0"
   }

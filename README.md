@@ -355,6 +355,23 @@ to a numeric column on the Orders board. Either:
 - Add a numeric column on the Orders board with that name, then click
   **Save changes** in Settings to bust the column cache.
 
+## Dependency notes
+
+- `@mondaycom/apps-sdk` is pinned to **3.0.10** (not `^3.x`). 3.0.11 onward
+  pulls a `@google-cloud/pubsub` chain with several moderate-severity
+  advisories that are unreachable from our code paths but flagged by `npm
+  audit`. 3.0.10 is the most recent version without that chain. The SDK
+  surface we use (`Storage`, `SecretsManager`, `Logger`, `Queue`) is stable
+  across 3.x.
+- `@vibe/core` is **not** a dependency. The portal's UI is built with custom
+  CSS to keep the bundle small and avoid pulling in `monday-ui-style`'s
+  vulnerable PostCSS chain.
+- `package.json` declares `overrides` to force newer `uuid`, `gaxios`,
+  `http-proxy-agent`, `retry-request`, `teeny-request`, and
+  `@tootallnate/once` versions across the whole tree. Without these,
+  Google Cloud transitive deps still trigger advisories. Run
+  `npm audit` after any dependency bump to confirm we're still clean.
+
 ## Out of scope
 
 - External hosting or webhooks outside monday code
