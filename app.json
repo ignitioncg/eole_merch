@@ -30,9 +30,6 @@
     "updates:write",
     "webhooks:write"
   ],
-  "monday_code": {
-    "entry": "server/src/index.js"
-  },
   "webhooks": [
     {
       "name": "inventory_column_changed",

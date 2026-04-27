@@ -152,23 +152,34 @@ npm run dev:client
 
 ## Deploy
 
-Deploy backend and frontend separately via `mapps`:
+The frontend and backend deploy as two separate `mapps code:push` calls.
+**Important:** the backend must be pushed from inside `server/` so the
+`server/package.json` is the deployable root — if you push from the repo
+root, monday code can't find a runnable `package.json` (the workspace
+config at the root has no `main`/`start`) and the container fails with
+`MODULE_NOT_FOUND`, `requireStack: []`.
 
 ```bash
-# 1. Build the frontend
-npm run build:client
+# 1. Push the backend (from inside server/)
+npm run deploy:server
+# expands to: cd server && mapps code:push
 
-# 2. Push the frontend to monday's CDN
-mapps code:push -c -d client/dist
+# 2. Build and push the frontend (from inside client/)
+npm run deploy:client
+# expands to: npm run build:client && cd client && mapps code:push -c -d dist
 
-# 3. Push the backend
-mapps code:push -d server
-
-# 4. Set the runtime token (server reads it via SecretsManager)
+# 3. Set the runtime token used by webhooks/cron contexts
 mapps code:secret -m set -k MONDAY_API_TOKEN -v <your-token>
 
-# 5. Promote the draft version
+# 4. Promote the draft version
 mapps app:promote
+```
+
+If you prefer running `mapps` directly:
+
+```bash
+cd server && mapps code:push                          # backend
+cd client && npm run build && mapps code:push -c -d dist   # frontend
 ```
 
 ## App configuration
@@ -301,6 +312,20 @@ posts an item update on the linked Inventory board item:
 - **date** columns use `{ date: "YYYY-MM-DD" }`.
 
 ## Troubleshooting
+
+### Deployment fails with `MODULE_NOT_FOUND` and `requireStack: []`
+Node is being invoked against an entry path that doesn't exist on the
+container — almost always because the deployable root doesn't contain a
+runnable `package.json`. Fix by pushing the backend from inside `server/`:
+
+```bash
+cd server
+mapps code:push
+```
+
+(`npm run deploy:server` does this for you.) Pushing from the repo root
+without `-d server` won't work — the workspace `package.json` at the root
+has no `main` or `start`, so monday code has nothing to launch.
 
 ### Reverse-sync is firing but nothing changes in the Catalog
 1. Check `mapps code:logs --live` for `[reverse-sync] skipped: <reason>`
