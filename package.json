@@ -14,8 +14,8 @@
     "build:client": "npm install --prefix client && npm run build --prefix client",
     "dev:client": "npm install --prefix client && npm run dev --prefix client",
     "dryrun": "node scripts/dryrun.js",
-    "deploy:client": "npm run build:client && cd client && mapps code:push -c -d dist",
-    "deploy:server": "mapps code:push"
+    "prepush": "npm run build:client",
+    "deploy": "npm run build:client && mapps code:push"
   },
   "dependencies": {
     "@mondaycom/apps-sdk": "3.0.10",

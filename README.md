@@ -50,8 +50,9 @@ board.
 ## Folder layout
 
 The backend lives at the repo root so monday code can launch
-`/workspace/index.js` without any `-d` gymnastics. The React portal
-lives in `client/` as a separate deployable.
+`/workspace/index.js`. The React portal source lives in `client/`,
+builds to `client/dist/`, and is served by Express at runtime — so
+it ships with the backend in a single deploy.
 
 ```
 app.json                  monday app manifest (features + webhooks)
@@ -155,29 +156,38 @@ npm run dev:client
 
 ## Deploy
 
-The backend lives at the repo root; the frontend lives in `client/`.
-Two `mapps code:push` calls and you're done.
+**One push, one command.** The Express backend serves the React build
+itself (Express static + SPA fallback), so there's no separate CDN
+upload — `mapps code:push` ships the whole thing in one go.
 
 ```bash
-# 1. Push the backend — repo root IS the deployable
-mapps code:push -i <APP_VERSION_ID>
-# or via npm: npm run deploy:server -- -i <APP_VERSION_ID>
+# 1. Build the frontend, then push backend + frontend together
+npm run deploy -- -i <APP_VERSION_ID>
+# expands to: npm run build:client && mapps code:push -i <APP_VERSION_ID>
 
-# 2. Build and push the frontend
-npm run deploy:client -- -i <APP_VERSION_ID>
-# expands to: npm install --prefix client && npm run build --prefix client \
-#             && cd client && mapps code:push -c -d dist
-
-# 3. Set the runtime token used by webhooks / cron contexts
+# 2. Set the runtime token used by webhooks / cron contexts
 mapps code:secret -m set -k MONDAY_API_TOKEN -v <your-token>
 
-# 4. Promote the draft version
+# 3. Promote the draft version
 mapps app:promote
 ```
 
-monday code mounts your push at `/workspace/` and unconditionally runs
-`node /workspace/index.js`. Because `index.js` lives at the repo root,
-this Just Works — there's no `-d` flag and no `cd` to remember.
+That's it. monday code mounts the push at `/workspace/`, runs
+`node /workspace/index.js`, and Express:
+
+- Serves the React app from `client/dist/` at `/` (and any other path,
+  via the SPA fallback)
+- Serves the API at `/api/...`
+- Handles the inventory webhook at `/webhooks/inventory`
+- Handles the retry queue at `/mndy-queue`
+
+The Custom Object iframe URL therefore lives on the same origin as the
+API. No CORS, no second deploy, no cache-bust dance between client and
+server — they ship together.
+
+`.mappsignore` excludes `node_modules`, `client/src/`, tests, scripts,
+and dev-only Vite config from the upload, so only the built `client/dist`
+ships.
 
 ## App configuration
 
@@ -320,7 +330,23 @@ that you pushed from a parent of this repo (so the upload's root has no
 
 ```bash
 cd /path/to/eole_merch
-mapps code:push -i <APP_VERSION_ID>
+npm run deploy -- -i <APP_VERSION_ID>
+```
+
+### The iframe loads but is blank / 404 on `?sessionToken=...`
+This means the React build didn't ship. Either:
+
+1. You ran `mapps code:push` directly without first running
+   `npm run build:client` — `client/dist/` was empty at upload time.
+   Use `npm run deploy` (which builds first) instead.
+2. `.mappsignore` is too aggressive and excluded `client/dist/`. Confirm
+   `client/dist/index.html` exists locally before pushing.
+
+You can sanity-check the deployed asset with:
+
+```bash
+curl -I https://<your-app-url>/
+# Expect: HTTP/1.1 200 OK, content-type: text/html
 ```
 
 ### Reverse-sync is firing but nothing changes in the Catalog

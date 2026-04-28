@@ -1,6 +1,8 @@
 'use strict';
 
 const express = require('express');
+const path = require('path');
+const fs = require('fs');
 
 const { MondayClient } = require('./lib/monday');
 const { getStorage } = require('./lib/storage');
@@ -39,6 +41,16 @@ async function buildApp({ storage: storageOverride } = {}) {
   });
 
   app.get('/health', (_req, res) => res.json({ ok: true, version: 1 }));
+
+  app.use('/api', (req, res, next) => {
+    if (!req.monday) {
+      return res.status(401).json({
+        error: 'monday API token unavailable — set MONDAY_API_TOKEN secret or pass x-monday-token header'
+      });
+    }
+    next();
+  });
+
   app.use('/api/products', productsRoute);
   app.use('/api/orders', ordersRoute);
   app.use('/api/movements', movementsRoute);
@@ -47,6 +59,19 @@ async function buildApp({ storage: storageOverride } = {}) {
   app.use('/api/install', installRoute);
   app.use('/webhooks', webhooksRoute);
   app.use('/mndy-queue', queueRoute);
+
+  const clientDist = path.join(__dirname, '..', 'client', 'dist');
+  if (fs.existsSync(path.join(clientDist, 'index.html'))) {
+    app.use(express.static(clientDist, { index: false, maxAge: '1h' }));
+    app.get('*', (req, res, next) => {
+      if (req.path.startsWith('/api/') || req.path.startsWith('/webhooks/') || req.path === '/mndy-queue') {
+        return next();
+      }
+      res.sendFile(path.join(clientDist, 'index.html'));
+    });
+  } else {
+    console.warn('[app] client/dist/index.html not found — frontend will 404. Run `npm run build:client` before deploying.');
+  }
 
   app.use((err, _req, res, _next) => {
     console.error('[error]', err.stack || err.message);

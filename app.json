@@ -8,8 +8,8 @@
       "name": "Stock Catalog",
       "description": "Browse merchandise, place orders, and review stock movements.",
       "build": {
-        "kind": "custom_url",
-        "url_template": "/index.html"
+        "kind": "monday_code",
+        "url_template": "/"
       }
     },
     {
@@ -17,8 +17,8 @@
       "name": "Stock Catalog — Settings",
       "description": "Configure board IDs, column IDs, and behaviour for the Stock Catalog app.",
       "build": {
-        "kind": "custom_url",
-        "url_template": "/index.html#/config"
+        "kind": "monday_code",
+        "url_template": "/#/config"
       }
     }
   ],
