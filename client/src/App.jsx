@@ -5,7 +5,7 @@ import NewOrder from './views/NewOrder.jsx';
 import History from './views/History.jsx';
 import ConfigView from './views/Config.jsx';
 import Toast from './components/Toast.jsx';
-import { IconCatalog, IconPlus, IconHistory, IconSettings, IconCheck, IconAlert } from './components/Icons.jsx';
+import { IconCatalog, IconPlus, IconHistory, IconSettings, IconCheck, IconAlert, IconUser } from './components/Icons.jsx';
 import { getCurrentUser } from './lib/api.js';
 
 const ROUTES = [
@@ -50,7 +50,14 @@ export default function App() {
     navigate('history');
   }
 
-  const initials = (actor.name || '?').split(' ').map((s) => s[0]).slice(0, 2).join('').toUpperCase();
+  const isLoadingActor = !actor || actor.name === 'Loading…';
+  const initials = (actor?.name || '')
+    .split(' ')
+    .map((s) => s[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
 
   return (
     <div className="app-shell">
@@ -64,8 +71,12 @@ export default function App() {
         </div>
 
         <div className="user-chip">
-          <div className="avatar">{initials}</div>
-          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{actor.name}</div>
+          <div className="avatar">
+            {initials || <IconUser width={14} height={14} />}
+          </div>
+          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {isLoadingActor ? 'Loading…' : (actor?.name || 'Stock Catalog user')}
+          </div>
         </div>
 
         <nav className="nav">

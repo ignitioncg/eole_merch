@@ -69,9 +69,12 @@ export async function getCurrentUser() {
   try {
     const res = await monday.get('context');
     const user = res?.data?.user;
-    if (user && user.id) return { id: String(user.id), name: user.name };
+    if (user && user.id) {
+      const name = user.name || user.email || `User ${user.id}`;
+      return { id: String(user.id), name, email: user.email || null };
+    }
   } catch (_) {}
-  return { id: 'local', name: 'Local user' };
+  return { id: 'local', name: 'Local user', email: null };
 }
 
 export function isDryRunMode() {

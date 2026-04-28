@@ -57,7 +57,17 @@ router.post('/:id/revert', async (req, res, next) => {
     const movement = parseMovement(movementItem, cfg);
 
     if (!movement.productItemId) {
-      return res.status(400).json({ error: 'Movement has no linked product — cannot revert.' });
+      const cv = (movementItem.column_values || []).find((c) => c.id === cfg.MOVEMENTS_PRODUCT_COLUMN_ID);
+      console.error(`[revert] no linked product on ${movementId}. Product col id=${cfg.MOVEMENTS_PRODUCT_COLUMN_ID}, raw value=${cv?.value}, text=${cv?.text}`);
+      return res.status(400).json({
+        error: 'Movement has no linked product — cannot revert. Open the movement on the Stock Movements board and re-link the Product, then try again.',
+        debug: {
+          movementId,
+          productColumnId: cfg.MOVEMENTS_PRODUCT_COLUMN_ID,
+          rawValue: cv?.value || null,
+          rawText: cv?.text || null
+        }
+      });
     }
 
     const productItem = await req.monday.getItem(movement.productItemId);
@@ -124,15 +134,42 @@ router.post('/:id/revert', async (req, res, next) => {
 });
 
 function parseLinkedItem(cv) {
-  if (!cv || !cv.value) return null;
-  try {
-    const parsed = JSON.parse(cv.value);
-    const ids = parsed && (parsed.linkedPulseIds || parsed.item_ids || []);
-    if (Array.isArray(ids) && ids.length) {
-      const first = ids[0];
-      return String(first.linkedPulseId || first.id || first);
+  if (!cv) return null;
+  // Monday's board_relation column can return any of these shapes
+  // depending on API version, write path, and whether it was set via
+  // `item_ids` or `linkedPulseIds`.
+  const shapes = [];
+  if (cv.value) {
+    try { shapes.push(JSON.parse(cv.value)); } catch (_) {}
+  }
+  if (cv.linked_item_ids) shapes.push({ linked_item_ids: cv.linked_item_ids });
+  if (cv.linked_items) shapes.push({ linked_items: cv.linked_items });
+
+  for (const parsed of shapes) {
+    if (!parsed) continue;
+    const candidates = [
+      parsed.linkedPulseIds,
+      parsed.linked_pulse_ids,
+      parsed.item_ids,
+      parsed.linkedItemIds,
+      parsed.linked_item_ids,
+      parsed.linked_items
+    ].filter(Array.isArray);
+    for (const arr of candidates) {
+      if (!arr.length) continue;
+      const first = arr[0];
+      if (first == null) continue;
+      if (typeof first === 'number' || typeof first === 'string') return String(first);
+      if (typeof first === 'object') {
+        const id = first.linkedPulseId
+          || first.linked_pulse_id
+          || first.id
+          || first.item_id
+          || first.itemId;
+        if (id != null) return String(id);
+      }
     }
-  } catch (_) {}
+  }
   return null;
 }
 
