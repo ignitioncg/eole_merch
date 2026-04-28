@@ -95,11 +95,12 @@ export default function App() {
           <NewOrder
             actor={actor}
             onCancel={() => navigate('catalog')}
+            onToast={setToast}
             onSubmitted={(r, opts = {}) => {
               if (opts.dryRun) {
                 setToast({
                   kind: 'info',
-                  message: '🧪 Test successful — nothing was saved. Remove ?dryRun=1 from the URL for real orders.'
+                  message: '🧪 Test successful — nothing was saved. Untick "Test mode" for real orders.'
                 });
                 return;
               }
@@ -116,8 +117,10 @@ export default function App() {
         )}
         {route === 'history' && (
           <History
+            actor={actor}
             filterProductId={historyFilterProductId}
             clearProductFilter={() => setHistoryFilterProductId(null)}
+            onToast={(t) => { setToast(t); setRefreshKey((k) => k + 1); }}
           />
         )}
         {route === 'config' && <ConfigView />}

@@ -109,4 +109,50 @@ function planManualAdjustment({ product, newStockOnHand, reason, note, actor, cf
   };
 }
 
-module.exports = { planOrderSubmission, planManualAdjustment };
+function planRevert({ movement, product, cfg, now = new Date() }) {
+  if (!movement) throw new Error('movement is required');
+  if (!product) throw new Error('product is required');
+
+  const reason = movement.reason;
+  if (reason === 'Initial Sync' || reason === 'initial_sync') {
+    return { ok: false, error: 'Cannot revert an Initial Sync movement — it would zero out the catalog.' };
+  }
+  if (typeof movement.delta !== 'number' || Number.isNaN(movement.delta)) {
+    return { ok: false, error: 'Movement has no numeric delta — cannot revert.' };
+  }
+
+  const wasOrder = reason === 'Order Placed' || reason === 'order_placed';
+  const inverseDelta = -movement.delta;
+  const stockBefore = product.stockOnHand;
+  const stockAfter = stockBefore + inverseDelta;
+  const stockInUseAfter = wasOrder ? product.stockInUse + movement.delta : null;
+
+  const newStatus = recalcStatus({
+    currentIndex: product.statusIndex,
+    newCount: stockAfter,
+    reorderPoint: product.reorderPoint,
+    defaultThreshold: cfg.DEFAULT_LOW_STOCK_THRESHOLD
+  });
+
+  const sign = movement.delta >= 0 ? '+' : '';
+  return {
+    ok: true,
+    productId: product.productId,
+    productName: product.name,
+    linkedInventoryItemId: product.linkedInventoryItemId,
+    delta: inverseDelta,
+    originalDelta: movement.delta,
+    originalReason: reason,
+    wasOrder,
+    stockBefore,
+    stockAfter,
+    stockInUseAfter,
+    oldStatus: product.statusIndex,
+    newStatus,
+    transitionedToLowOrOut: transitionedToLowOrOut(product.statusIndex, newStatus),
+    timestamp: now.toISOString(),
+    note: `Reverted movement #${movement.movementId} (was ${reason}, delta ${sign}${movement.delta})`
+  };
+}
+
+module.exports = { planOrderSubmission, planManualAdjustment, planRevert };

@@ -96,6 +96,19 @@ Click **New order** in the sidebar (or the "New order" button on the
 Catalog). You'll see a step indicator at the top: **Recipient → Products → Review**. Each step is gated — the **Next** button stays disabled
 until you've filled in what's required.
 
+### 🧪 Test mode
+
+Top-right of the New Order screen is a **Test mode (no changes)**
+checkbox. Tick it to safely walk through the wizard end-to-end without
+deducting any stock or creating any order. The page background and
+banner go yellow as a reminder, the Submit button changes to **"Run
+test (no changes)"**, and on success you get a toast saying *"Test
+successful — nothing was saved"*.
+
+Use this for training, demos, or anytime you want to see what would
+happen without actually doing it. You can also pre-enable it for a
+specific link by appending `?dryRun=1` to the URL.
+
 ### Step 1 — Recipient
 
 A blue help banner explains the flow. Then two fields side-by-side:
@@ -112,12 +125,12 @@ A blue help banner explains the flow. Then two fields side-by-side:
 - **Recipient name \*** — required. This is what shows on the Orders
   board. Pre-filled if you picked a contact, but always editable.
 
-Then:
+Then (all optional — leave blank if they don't apply):
 
-- **Shipping address \*** — required. Pre-filled from the contact if
-  available.
+- **Shipping address** — pre-filled from the contact if available.
+  Leave blank for pickups, in-person handovers at events, etc.
 - **Sent via** — courier or method (e.g. "AusPost express")
-- **Event** — optional, if it's for a conference or specific event
+- **Event** — if it's for a conference or specific event
 - **Notes** — anything else you want recorded
 
 Click **Next: Products** to continue.
@@ -239,9 +252,55 @@ Each row shows:
 - **Reason · Actor · Note** in smaller text below
 - The **delta** (green for additions, red for deductions)
 - **Before → After** stock counts
+- A **Revert** button on the right
 
 If you opened History from a product's side panel, a banner at the top
 shows "Filtered to one product" with a button to clear the filter.
+
+### Revert — undoing a movement
+
+Made a mistake? Click **Revert** on any movement row. You'll get a
+confirmation dialog showing exactly what will happen, e.g.:
+
+> Revert this movement?
+>
+> Cutlery Sets · -5 · Order Placed
+> Reason: Order Placed
+> Original change: -5
+>
+> This will adjust stock by +5 and write a "Manual Correction" entry
+> showing the revert. The original movement stays in the history as
+> a record.
+
+When you confirm:
+
+- Stock on Hand is adjusted by the **opposite of the original delta**
+  (so a -5 order becomes +5, a +200 shipment becomes -200)
+- For order reverts, **Stock in Use** is also reduced (so the
+  lifetime cumulative number stays accurate)
+- The status is recalculated (if reverting drops something below the
+  reorder point it flips to Low Stock, etc.)
+- A new **Manual Correction** movement is written with a note like
+  *"Reverted movement #12345 (was Order Placed, delta -5)"* — both the
+  original and the revert stay visible in the history
+
+**Initial Sync** movements can't be reverted (the button stays
+disabled) — reverting one would zero out the catalog.
+
+### How revert handles already-changed stock
+
+Revert applies the inverse delta to **whatever the current stock
+actually is** — not what it was when the original movement happened.
+Example:
+
+- Cutlery Sets had 481, you placed an order for 5 → stock is now 476
+- You then receive a new shipment of 100 → stock is now 576
+- You revert the original order → stock becomes **571** (576 + 5),
+  not 481
+
+That's the right answer — only the original 5-unit deduction is being
+undone, not the shipment in between. The audit trail shows all three
+events.
 
 The same data is also available as items on the **Stock Movements
 board** in monday if you ever want to share or report from there.

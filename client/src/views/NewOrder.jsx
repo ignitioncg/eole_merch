@@ -10,7 +10,7 @@ import {
 
 const STEPS = ['Recipient', 'Products', 'Review'];
 
-export default function NewOrder({ actor, onSubmitted, onCancel }) {
+export default function NewOrder({ actor, onSubmitted, onCancel, onToast }) {
   const [step, setStep] = useState(0);
   const [products, setProducts] = useState([]);
   const [productsLoading, setProductsLoading] = useState(true);
@@ -31,7 +31,8 @@ export default function NewOrder({ actor, onSubmitted, onCancel }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
-  const dryRun = useMemo(isDryRunMode, []);
+  // Dry-run: starts true if URL flag is set, otherwise toggle
+  const [dryRun, setDryRun] = useState(() => isDryRunMode());
 
   useEffect(() => {
     Products.list()
@@ -65,8 +66,8 @@ export default function NewOrder({ actor, onSubmitted, onCancel }) {
     (l) => !isPrintOnDemand(l.product.name) && l.quantity > l.product.stockOnHand
   );
 
-  // step gates
-  const recipientReady = recipientName.trim().length > 0 && shipping.trim().length > 0;
+  // step gates — only recipient name is required; address is optional (some orders are pickups / events)
+  const recipientReady = recipientName.trim().length > 0;
   const linesReady = validLines.length > 0;
 
   async function submit() {
@@ -90,7 +91,11 @@ export default function NewOrder({ actor, onSubmitted, onCancel }) {
       const r = await Orders.submit(order, actor, dryRun);
       onSubmitted && onSubmitted(r, { dryRun });
     } catch (e) {
-      setError(e.message);
+      const msg = e.message || 'Submission failed';
+      setError(msg);
+      onToast?.({ kind: 'error', message: `Submission failed — see banner on Review for details` });
+      // bring user to Review so they can see the banner
+      setStep(2);
     } finally {
       setSubmitting(false);
     }
@@ -108,13 +113,33 @@ export default function NewOrder({ actor, onSubmitted, onCancel }) {
           </div>
         </div>
         <div className="page-actions">
+          <label
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+              padding: '8px 12px',
+              border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
+              background: dryRun ? 'var(--orange-soft)' : 'var(--surface)',
+              color: dryRun ? 'var(--orange)' : 'var(--text-muted)',
+              fontWeight: 600, fontSize: 13, cursor: 'pointer',
+              textTransform: 'none', letterSpacing: 0
+            }}
+            title="When ticked, Submit only previews — no stock or order changes."
+          >
+            <input
+              type="checkbox"
+              checked={dryRun}
+              onChange={(e) => setDryRun(e.target.checked)}
+              style={{ width: 'auto', margin: 0 }}
+            />
+            Test mode (no changes)
+          </label>
           <button className="btn ghost" onClick={onCancel}>Cancel</button>
         </div>
       </div>
 
       {dryRun && (
         <Banner kind="warn" title="🧪 You're in test mode">
-          Submissions are previewed only — no stock changes, no order on monday, no Stock Movement entries. Append <code>?dryRun=1</code> to enable; remove it for real orders.
+          Submissions are previewed only — no stock changes, no order on monday, no Stock Movement entries. Untick the checkbox above to switch off.
         </Banner>
       )}
 
@@ -154,7 +179,7 @@ export default function NewOrder({ actor, onSubmitted, onCancel }) {
         <button
           className="btn ghost"
           disabled={step === 0}
-          onClick={() => setStep((s) => Math.max(0, s - 1))}
+          onClick={() => { setError(null); setStep((s) => Math.max(0, s - 1)); }}
         >
           ← Back
         </button>
@@ -213,15 +238,15 @@ function RecipientStep({
       </div>
 
       <div className="field" style={{ marginTop: 16 }}>
-        <label>Shipping address *</label>
+        <label>Shipping address (optional)</label>
         <input
           type="text"
           value={shipping}
           onChange={(e) => setShipping(e.target.value)}
-          placeholder="Street, suburb, state, postcode"
+          placeholder="Street, suburb, state, postcode — leave blank for pickups or events"
         />
         {contact && contact.columnValues && (
-          <div className="help">Pre-filled from contact. Edit if needed.</div>
+          <div className="help">Pre-filled from contact. Edit if needed, or clear it for pickups/events.</div>
         )}
       </div>
 

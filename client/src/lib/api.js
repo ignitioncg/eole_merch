@@ -48,7 +48,8 @@ export const Orders = {
 };
 
 export const Movements = {
-  list: ({ productId, reason } = {}) => api('/api/movements', { query: { productId, reason } })
+  list: ({ productId, reason } = {}) => api('/api/movements', { query: { productId, reason } }),
+  revert: (id, actor) => api(`/api/movements/${id}/revert`, { method: 'POST', body: { actor } })
 };
 
 export const Contacts = {

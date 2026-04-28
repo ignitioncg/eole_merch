@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { planOrderSubmission, planManualAdjustment } = require('../src/lib/deduction');
+const { planOrderSubmission, planManualAdjustment, planRevert } = require('../src/lib/deduction');
 const { STATUS } = require('../src/lib/status');
 
 const cfg = { DEFAULT_LOW_STOCK_THRESHOLD: 25 };
@@ -107,4 +107,70 @@ test('planManualAdjustment computes delta and recalcs status', () => {
   assert.equal(adj.stockAfter, 460);
   assert.equal(adj.newStatus, STATUS.IN_STOCK);
   assert.equal(adj.reason, 'stocktake_adjustment');
+});
+
+/* ─── planRevert ─── */
+
+test('planRevert reverses an Order Placed movement and adjusts stockInUse', () => {
+  // After an order: Cutlery Sets went 481 → 476, stockInUse 24 → 29
+  const productNow = { ...products[0], stockOnHand: 476, stockInUse: 29 };
+  const movement = {
+    movementId: 'M1',
+    reason: 'Order Placed',
+    delta: -5
+  };
+  const plan = planRevert({ movement, product: productNow, cfg });
+  assert.equal(plan.ok, true);
+  assert.equal(plan.delta, 5);
+  assert.equal(plan.stockBefore, 476);
+  assert.equal(plan.stockAfter, 481);
+  assert.equal(plan.stockInUseAfter, 24, 'stockInUse should also be reverted for orders');
+  assert.equal(plan.wasOrder, true);
+  assert.equal(plan.newStatus, STATUS.IN_STOCK);
+  assert.match(plan.note, /Reverted movement #M1/);
+  assert.match(plan.note, /Order Placed/);
+});
+
+test('planRevert reverses a Manual Correction movement (no stockInUse change)', () => {
+  // After a stocktake: 462 → 450, delta -12
+  const productNow = { ...products[0], name: 'Tote bags', stockOnHand: 450, stockInUse: 38 };
+  const movement = { movementId: 'M2', reason: 'Manual Correction', delta: -12 };
+  const plan = planRevert({ movement, product: productNow, cfg });
+  assert.equal(plan.ok, true);
+  assert.equal(plan.delta, 12);
+  assert.equal(plan.stockAfter, 462);
+  assert.equal(plan.stockInUseAfter, null);
+  assert.equal(plan.wasOrder, false);
+});
+
+test('planRevert reverses a New Shipment (positive delta becomes negative)', () => {
+  const productNow = { ...products[0], name: 'Stickers', stockOnHand: 1400, stockInUse: 200, statusIndex: STATUS.IN_STOCK };
+  const movement = { movementId: 'M3', reason: 'New Shipment', delta: 200 };
+  const plan = planRevert({ movement, product: productNow, cfg });
+  assert.equal(plan.ok, true);
+  assert.equal(plan.delta, -200);
+  assert.equal(plan.stockAfter, 1200);
+});
+
+test('planRevert refuses to revert Initial Sync', () => {
+  const movement = { movementId: 'M0', reason: 'Initial Sync', delta: 481 };
+  const plan = planRevert({ movement, product: products[0], cfg });
+  assert.equal(plan.ok, false);
+  assert.match(plan.error, /Initial Sync/);
+});
+
+test('planRevert refuses if delta is missing', () => {
+  const movement = { movementId: 'M?', reason: 'Order Placed', delta: null };
+  const plan = planRevert({ movement, product: products[0], cfg });
+  assert.equal(plan.ok, false);
+});
+
+test('planRevert flags low-stock transition when crossing threshold', () => {
+  // Product has 30 on hand. Reverting a +10 shipment would drop to 20 → Low Stock.
+  const productNow = { ...products[5], stockOnHand: 30 }; // Almost Out, threshold default 25
+  const movement = { movementId: 'M4', reason: 'New Shipment', delta: 10 };
+  const plan = planRevert({ movement, product: productNow, cfg });
+  assert.equal(plan.stockAfter, 20);
+  assert.equal(plan.newStatus, STATUS.LOW_STOCK);
+  assert.equal(plan.transitionedToLowOrOut, true);
 });

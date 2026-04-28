@@ -23,11 +23,19 @@ const REASON_TO_CLS = {
   'Initial Sync': 'initial_sync'
 };
 
-export default function History({ filterProductId, clearProductFilter }) {
+const REVERTABLE_REASONS = new Set([
+  'Order Placed',
+  'New Shipment',
+  'Stocktake Adjustment',
+  'Manual Correction'
+]);
+
+export default function History({ filterProductId, clearProductFilter, actor, onToast }) {
   const [movements, setMovements] = useState([]);
   const [loading, setLoading] = useState(true);
   const [reason, setReason] = useState('');
   const [error, setError] = useState(null);
+  const [revertingId, setRevertingId] = useState(null);
 
   const load = () => {
     setLoading(true);
@@ -38,6 +46,26 @@ export default function History({ filterProductId, clearProductFilter }) {
   };
 
   useEffect(load, [filterProductId, reason]);
+
+  async function revert(m) {
+    const sign = m.delta > 0 ? '+' : '';
+    const inverse = -m.delta;
+    const inverseSign = inverse > 0 ? '+' : '';
+    const ok = window.confirm(
+      `Revert this movement?\n\n${m.itemName}\nReason: ${m.reason}\nOriginal change: ${sign}${m.delta}\n\nThis will adjust stock by ${inverseSign}${inverse} and write a "Manual Correction" entry showing the revert. The original movement stays in the history as a record.`
+    );
+    if (!ok) return;
+    setRevertingId(m.movementId);
+    try {
+      const r = await Movements.revert(m.movementId, actor);
+      onToast?.({ kind: 'success', message: `Reverted ✓  ${r.productName}: ${formatNumber(r.stockBefore)} → ${formatNumber(r.stockAfter)}` });
+      load();
+    } catch (e) {
+      onToast?.({ kind: 'error', message: `Revert failed: ${e.message}` });
+    } finally {
+      setRevertingId(null);
+    }
+  }
 
   const grouped = useMemo(() => {
     const out = new Map();
@@ -54,7 +82,7 @@ export default function History({ filterProductId, clearProductFilter }) {
       <div className="page-header">
         <div>
           <h1>History</h1>
-          <div className="sub">{loading ? 'Loading…' : `${movements.length} movement${movements.length === 1 ? '' : 's'}`}</div>
+          <div className="sub">{loading ? 'Loading…' : `${movements.length} movement${movements.length === 1 ? '' : 's'} · click Revert to undo`}</div>
         </div>
         <div className="page-actions">
           <button className="btn ghost sm" onClick={load} aria-label="Refresh">
@@ -101,23 +129,34 @@ export default function History({ filterProductId, clearProductFilter }) {
           {grouped.map(([day, items]) => (
             <div key={day}>
               <div className="timeline-day">{prettyDay(day)}</div>
-              {items.map((m) => (
-                <div key={m.movementId} className={`movement-row ${REASON_TO_CLS[m.reason] || ''}`}>
-                  <div className="dot" />
-                  <div className="name">
-                    <strong>{m.itemName}</strong>
-                    <div className="meta">
-                      {m.reason}{m.actor ? ` · ${m.actor}` : ''}{m.note ? ` · "${m.note}"` : ''}
+              {items.map((m) => {
+                const canRevert = REVERTABLE_REASONS.has(m.reason);
+                return (
+                  <div key={m.movementId} className={`movement-row ${REASON_TO_CLS[m.reason] || ''}`}>
+                    <div className="dot" />
+                    <div className="name">
+                      <strong>{m.itemName}</strong>
+                      <div className="meta">
+                        {m.reason}{m.actor ? ` · ${m.actor}` : ''}{m.note ? ` · "${m.note}"` : ''}
+                      </div>
                     </div>
+                    <div className={`delta ${m.delta > 0 ? 'delta-positive' : m.delta < 0 ? 'delta-negative' : 'delta-zero'}`}>
+                      {m.delta > 0 ? '+' : ''}{m.delta}
+                    </div>
+                    <div className="stocks">
+                      {formatNumber(m.stockBefore)} → {formatNumber(m.stockAfter)}
+                    </div>
+                    <button
+                      className="btn ghost sm"
+                      disabled={!canRevert || revertingId === m.movementId}
+                      onClick={() => canRevert && revert(m)}
+                      title={canRevert ? 'Undo this movement' : 'Initial Sync movements can\'t be reverted'}
+                    >
+                      {revertingId === m.movementId ? <><span className="spinner" /> Reverting…</> : 'Revert'}
+                    </button>
                   </div>
-                  <div className={`delta ${m.delta > 0 ? 'delta-positive' : m.delta < 0 ? 'delta-negative' : 'delta-zero'}`}>
-                    {m.delta > 0 ? '+' : ''}{m.delta}
-                  </div>
-                  <div className="stocks">
-                    {formatNumber(m.stockBefore)} → {formatNumber(m.stockAfter)}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ))}
         </div>
