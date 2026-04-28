@@ -313,19 +313,23 @@ posts an item update on the linked Inventory board item:
 
 ## Troubleshooting
 
-### Deployment fails with `MODULE_NOT_FOUND` and `requireStack: []`
-Node is being invoked against an entry path that doesn't exist on the
-container — almost always because the deployable root doesn't contain a
-runnable `package.json`. Fix by pushing the backend from inside `server/`:
+### Deployment fails with `Cannot find module '/workspace/index.js'`
+monday code's container mounts your push at `/workspace/` and runs
+`node /workspace/index.js` — it does **not** honor `package.json#main`.
+Two things must be true:
 
-```bash
-cd server
-mapps code:push
-```
+1. The file `index.js` must exist at the **root of what you pushed**
+   (this repo's `server/index.js` plays that role).
+2. You must push from inside `server/`, so `server/` is the deployable
+   root:
+   ```bash
+   cd server
+   mapps code:push -i <APP_VERSION_ID>
+   ```
+   `npm run deploy:server -- -i <APP_VERSION_ID>` does this for you.
 
-(`npm run deploy:server` does this for you.) Pushing from the repo root
-without `-d server` won't work — the workspace `package.json` at the root
-has no `main` or `start`, so monday code has nothing to launch.
+Pushing from the repo root uploads the workspace `package.json` (which
+has no entry) — the container then can't find `/workspace/index.js`.
 
 ### Reverse-sync is firing but nothing changes in the Catalog
 1. Check `mapps code:logs --live` for `[reverse-sync] skipped: <reason>`

@@ -1,6 +1,6 @@
 'use strict';
 
-const { buildApp } = require('./app');
+const { buildApp } = require('./src/app');
 
 const port = Number(process.env.PORT || 8080);
 
