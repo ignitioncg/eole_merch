@@ -53,6 +53,10 @@ class MondayClient {
                 type
                 text
                 value
+                ... on BoardRelationValue {
+                  linked_item_ids
+                  linked_items { id name }
+                }
               }
             }
           }
@@ -86,7 +90,16 @@ class MondayClient {
           id
           name
           board { id }
-          column_values { id type text value }
+          column_values {
+            id
+            type
+            text
+            value
+            ... on BoardRelationValue {
+              linked_item_ids
+              linked_items { id name }
+            }
+          }
         }
       }`,
       { id: [String(itemId)] }

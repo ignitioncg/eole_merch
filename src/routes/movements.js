@@ -5,6 +5,7 @@ const { planRevert } = require('../lib/deduction');
 const { inventoryItemToProduct } = require('../lib/productMapping');
 const { buildMovementPayload } = require('../lib/movements');
 const { writeInventoryUpdate } = require('../lib/sync');
+const { findMatch } = require('../lib/matcher');
 
 const router = express.Router();
 
@@ -56,13 +57,33 @@ router.post('/:id/revert', async (req, res, next) => {
     if (!movementItem) return res.status(404).json({ error: 'Movement not found' });
     const movement = parseMovement(movementItem, cfg);
 
-    if (!movement.productItemId) {
+    let productItemId = movement.productItemId;
+    let productLookupMethod = 'linked';
+
+    // Fallback: if the board_relation link is empty (some legacy
+    // movements were created without it), parse the product name out
+    // of the movement's title ("<Product> · <delta> · <Reason>") and
+    // fuzzy-match it against the inventory board.
+    if (!productItemId && movementItem.name) {
+      const namePart = movementItem.name.split('·')[0]?.trim();
+      if (namePart) {
+        const inventory = await req.monday.listBoardItems(cfg.INVENTORY_BOARD_ID);
+        const match = findMatch(namePart, inventory, (i) => i.name);
+        if (match) {
+          productItemId = String(match.entry.id);
+          productLookupMethod = `name match ("${namePart}" → "${match.entry.name}")`;
+        }
+      }
+    }
+
+    if (!productItemId) {
       const cv = (movementItem.column_values || []).find((c) => c.id === cfg.MOVEMENTS_PRODUCT_COLUMN_ID);
-      console.error(`[revert] no linked product on ${movementId}. Product col id=${cfg.MOVEMENTS_PRODUCT_COLUMN_ID}, raw value=${cv?.value}, text=${cv?.text}`);
+      console.error(`[revert] no linked product on ${movementId}. Product col id=${cfg.MOVEMENTS_PRODUCT_COLUMN_ID}, raw value=${cv?.value}, text=${cv?.text}, item name=${movementItem.name}`);
       return res.status(400).json({
         error: 'Movement has no linked product — cannot revert. Open the movement on the Stock Movements board and re-link the Product, then try again.',
         debug: {
           movementId,
+          itemName: movementItem.name,
           productColumnId: cfg.MOVEMENTS_PRODUCT_COLUMN_ID,
           rawValue: cv?.value || null,
           rawText: cv?.text || null
@@ -70,7 +91,7 @@ router.post('/:id/revert', async (req, res, next) => {
       });
     }
 
-    const productItem = await req.monday.getItem(movement.productItemId);
+    const productItem = await req.monday.getItem(productItemId);
     if (!productItem) {
       return res.status(404).json({ error: 'The product this movement was for no longer exists on the inventory board.' });
     }
@@ -78,6 +99,10 @@ router.post('/:id/revert', async (req, res, next) => {
 
     const plan = planRevert({ movement, product, cfg });
     if (!plan.ok) return res.status(400).json({ error: plan.error });
+
+    if (productLookupMethod !== 'linked') {
+      plan.note += ` [resolved via ${productLookupMethod}]`;
+    }
 
     const actorId = (req.body && req.body.actor && req.body.actor.id) || (await req.monday.getMe()).id;
 
