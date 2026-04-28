@@ -95,7 +95,14 @@ export default function App() {
           <NewOrder
             actor={actor}
             onCancel={() => navigate('catalog')}
-            onSubmitted={(r) => {
+            onSubmitted={(r, opts = {}) => {
+              if (opts.dryRun) {
+                setToast({
+                  kind: 'info',
+                  message: '🧪 Test successful — nothing was saved. Remove ?dryRun=1 from the URL for real orders.'
+                });
+                return;
+              }
               setToast({
                 kind: 'success',
                 message: r.linkedOrderItemId

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Contacts, Orders, Products } from '../lib/api.js';
+import { Contacts, Orders, Products, isDryRunMode, isPrintOnDemand } from '../lib/api.js';
 import StatusPill from '../components/StatusPill.jsx';
 import Steps from '../components/Steps.jsx';
 import Banner from '../components/Banner.jsx';
@@ -31,6 +31,8 @@ export default function NewOrder({ actor, onSubmitted, onCancel }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
+  const dryRun = useMemo(isDryRunMode, []);
+
   useEffect(() => {
     Products.list()
       .then((r) => setProducts(r.products))
@@ -59,7 +61,9 @@ export default function NewOrder({ actor, onSubmitted, onCancel }) {
 
   const validLines = lines.filter((l) => l.product && l.quantity > 0);
   const totalUnits = validLines.reduce((s, l) => s + Number(l.quantity), 0);
-  const overstockLines = validLines.filter((l) => l.quantity > l.product.stockOnHand);
+  const overstockLines = validLines.filter(
+    (l) => !isPrintOnDemand(l.product.name) && l.quantity > l.product.stockOnHand
+  );
 
   // step gates
   const recipientReady = recipientName.trim().length > 0 && shipping.trim().length > 0;
@@ -83,8 +87,8 @@ export default function NewOrder({ actor, onSubmitted, onCancel }) {
           quantity: Number(l.quantity)
         }))
       };
-      const r = await Orders.submit(order, actor, false);
-      onSubmitted && onSubmitted(r);
+      const r = await Orders.submit(order, actor, dryRun);
+      onSubmitted && onSubmitted(r, { dryRun });
     } catch (e) {
       setError(e.message);
     } finally {
@@ -97,12 +101,22 @@ export default function NewOrder({ actor, onSubmitted, onCancel }) {
       <div className="page-header">
         <div>
           <h1>New order</h1>
-          <div className="sub">Three quick steps. Submitting deducts stock and creates the order on monday.</div>
+          <div className="sub">
+            {dryRun
+              ? 'Test mode — no stock will change, no order will be created.'
+              : 'Three quick steps. Submitting deducts stock and creates the order on monday.'}
+          </div>
         </div>
         <div className="page-actions">
           <button className="btn ghost" onClick={onCancel}>Cancel</button>
         </div>
       </div>
+
+      {dryRun && (
+        <Banner kind="warn" title="🧪 You're in test mode">
+          Submissions are previewed only — no stock changes, no order on monday, no Stock Movement entries. Append <code>?dryRun=1</code> to enable; remove it for real orders.
+        </Banner>
+      )}
 
       <Steps steps={STEPS} current={step} />
 
@@ -153,8 +167,10 @@ export default function NewOrder({ actor, onSubmitted, onCancel }) {
             Next: {STEPS[step + 1]} <IconArrow width={14} height={14} />
           </button>
         ) : (
-          <button className="btn" disabled={submitting} onClick={submit}>
-            {submitting ? <><span className="spinner" /> Submitting…</> : <><IconCheck width={16} height={16} /> Submit order</>}
+          <button className={`btn ${dryRun ? 'subtle' : ''}`} disabled={submitting} onClick={submit}>
+            {submitting
+              ? <><span className="spinner" /> {dryRun ? 'Running test…' : 'Submitting…'}</>
+              : <><IconCheck width={16} height={16} /> {dryRun ? 'Run test (no changes)' : 'Submit order'}</>}
           </button>
         )}
       </div>
@@ -240,7 +256,7 @@ function ProductsStep({ products, loading, lines, setLine, removeLine, addLine, 
     <div>
       <h3><IconBox /> What are you sending?</h3>
       <Banner kind="info">
-        Add a line per product. <strong>Out of Stock</strong> items are greyed out, <strong>On Order</strong> items prompt for confirmation, <strong>Discontinued</strong> items are hidden.
+        Add a line per product. <strong>Print-on-demand</strong> items (flyers etc.) can be ordered in any quantity — they're printed when the order goes out. <strong>Out of Stock</strong> and <strong>On Order</strong> items prompt for confirmation. <strong>Discontinued</strong> items are hidden.
       </Banner>
 
       {loading ? (
@@ -250,8 +266,11 @@ function ProductsStep({ products, loading, lines, setLine, removeLine, addLine, 
       ) : (
         <>
           <div className="line-list">
-            {lines.map((line, idx) => (
-              <div key={idx} className={`line-card${line.product && line.quantity > line.product.stockOnHand ? ' warn' : ''}`}>
+            {lines.map((line, idx) => {
+              const printOnDemand = line.product && isPrintOnDemand(line.product.name);
+              const willGoNegative = line.product && !printOnDemand && line.quantity > line.product.stockOnHand;
+              return (
+              <div key={idx} className={`line-card${willGoNegative ? ' warn' : ''}`}>
                 <div>
                   <ProductPicker
                     products={products}
@@ -260,7 +279,9 @@ function ProductsStep({ products, loading, lines, setLine, removeLine, addLine, 
                   />
                   {line.product && (
                     <div className="stock-hint">
-                      {line.quantity > line.product.stockOnHand ? (
+                      {printOnDemand ? (
+                        <><span className="pill in_stock">Print on demand</span> any quantity · printed when ordered</>
+                      ) : willGoNegative ? (
                         <><IconWarn width={12} height={12} style={{ verticalAlign: 'middle' }} /> Only {line.product.stockOnHand} on hand — stock will go negative</>
                       ) : (
                         <>{line.product.stockOnHand} on hand · <StatusPill statusKey={line.product.statusKey} /></>
@@ -284,7 +305,8 @@ function ProductsStep({ products, loading, lines, setLine, removeLine, addLine, 
                   <IconTrash width={16} height={16} />
                 </button>
               </div>
-            ))}
+              );
+            })}
           </div>
 
           <button className="btn subtle" onClick={addLine} style={{ marginTop: 12 }}>
@@ -493,26 +515,34 @@ function ProductPicker({ products, value, onChange }) {
       </div>
       {open && (
         <div className="search-results">
-          {filtered.map((p) => (
-            <div
-              key={p.productId}
-              className="result"
-              style={{ opacity: p.statusKey === 'OutOfStock' ? 0.45 : 1, cursor: p.statusKey === 'OutOfStock' ? 'not-allowed' : 'pointer' }}
-              onMouseDown={() => {
-                if (p.statusKey === 'OutOfStock') return;
-                if (p.statusKey === 'OnOrder' && !window.confirm(`${p.name} is currently On Order. Add anyway?`)) return;
-                onChange(p);
-                setSearch(p.name);
-                setOpen(false);
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                <strong>{p.name}</strong>
-                <StatusPill statusKey={p.statusKey} />
+          {filtered.map((p) => {
+            const printOnDemand = isPrintOnDemand(p.name);
+            return (
+              <div
+                key={p.productId}
+                className="result"
+                onMouseDown={() => {
+                  if (p.statusKey === 'OnOrder' && !window.confirm(`${p.name} is currently On Order. Add anyway?`)) return;
+                  if (!printOnDemand && p.statusKey === 'OutOfStock' && !window.confirm(
+                    `${p.name} is Out of Stock. Submitting will leave stock negative — only do this if you're sure. Add anyway?`
+                  )) return;
+                  onChange(p);
+                  setSearch(p.name);
+                  setOpen(false);
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                  <strong>{p.name}</strong>
+                  {printOnDemand
+                    ? <span className="pill in_stock">Print on demand</span>
+                    : <StatusPill statusKey={p.statusKey} />}
+                </div>
+                <div className="meta">
+                  {printOnDemand ? 'Printed when ordered — any quantity' : `${p.stockOnHand} on hand`}
+                </div>
               </div>
-              <div className="meta">{p.stockOnHand} on hand</div>
-            </div>
-          ))}
+            );
+          })}
           {filtered.length === 0 && (
             <div className="result" style={{ color: 'var(--text-soft)' }}>No products match.</div>
           )}

@@ -72,3 +72,18 @@ export async function getCurrentUser() {
   } catch (_) {}
   return { id: 'local', name: 'Local user' };
 }
+
+export function isDryRunMode() {
+  try {
+    const search = new URLSearchParams(window.location.search);
+    if (['1', 'true', 'yes'].includes((search.get('dryRun') || '').toLowerCase())) return true;
+    const hash = window.location.hash || '';
+    const hashQ = hash.includes('?') ? new URLSearchParams(hash.split('?')[1]) : null;
+    if (hashQ && ['1', 'true', 'yes'].includes((hashQ.get('dryRun') || '').toLowerCase())) return true;
+  } catch (_) {}
+  return false;
+}
+
+export function isPrintOnDemand(name) {
+  return /\s-\s*print as required\s*$/i.test(name || '');
+}
