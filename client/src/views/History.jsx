@@ -147,7 +147,7 @@ export default function History({ filterProductId, clearProductFilter, actor, on
                       {formatNumber(m.stockBefore)} → {formatNumber(m.stockAfter)}
                     </div>
                     <button
-                      className="btn ghost sm"
+                      className="btn ghost sm revert-btn"
                       disabled={!canRevert || revertingId === m.movementId}
                       onClick={() => canRevert && revert(m)}
                       title={canRevert ? 'Undo this movement' : 'Initial Sync movements can\'t be reverted'}

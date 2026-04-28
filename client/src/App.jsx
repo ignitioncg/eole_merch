@@ -50,14 +50,18 @@ export default function App() {
     navigate('history');
   }
 
+  const placeholderNames = new Set(['', '?', 'Loading…', 'Local user', 'Stock Catalog user', 'Unknown']);
   const isLoadingActor = !actor || actor.name === 'Loading…';
-  const initials = (actor?.name || '')
-    .split(' ')
-    .map((s) => s[0])
-    .filter(Boolean)
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
+  const hasRealName = actor?.name && !placeholderNames.has(actor.name);
+  const initials = hasRealName
+    ? actor.name
+        .split(/\s+/)
+        .map((s) => s[0])
+        .filter((c) => c && /[A-Za-z0-9]/.test(c))
+        .slice(0, 2)
+        .join('')
+        .toUpperCase()
+    : '';
 
   return (
     <div className="app-shell">
