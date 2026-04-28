@@ -4,22 +4,37 @@ import StatusPill from '../components/StatusPill.jsx';
 
 function ContactSearch({ onSelect, value, onChange }) {
   const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
+    setError(null);
     if (!value || value.length < 2) {
       setResults([]);
+      setLoading(false);
       return;
     }
+    setLoading(true);
     const timer = setTimeout(async () => {
       try {
         const r = await Contacts.search(value);
-        if (active) setResults(r.contacts || []);
-      } catch (_) {}
+        if (!active) return;
+        setResults(r.contacts || []);
+      } catch (e) {
+        if (!active) return;
+        console.error('[contacts.search]', e);
+        setError(e.message || 'Could not load contacts');
+        setResults([]);
+      } finally {
+        if (active) setLoading(false);
+      }
     }, 200);
     return () => { active = false; clearTimeout(timer); };
   }, [value]);
+
+  const showDropdown = open && (loading || results.length > 0 || error || (value && value.length >= 2));
 
   return (
     <div style={{ position: 'relative' }}>
@@ -32,9 +47,21 @@ function ContactSearch({ onSelect, value, onChange }) {
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         style={{ width: '100%' }}
       />
-      {open && results.length > 0 && (
+      {showDropdown && (
         <div className="search-results">
-          {results.map((c) => (
+          {loading && <div className="result" style={{ color: 'var(--text-soft)' }}>Searching…</div>}
+          {!loading && error && (
+            <div className="result" style={{ color: 'var(--red)' }}>
+              <strong>Error: {error}</strong>
+              <div style={{ fontSize: 12 }}>Type the name manually below — order will still go through without a contact link.</div>
+            </div>
+          )}
+          {!loading && !error && results.length === 0 && value.length >= 2 && (
+            <div className="result" style={{ color: 'var(--text-soft)' }}>
+              No contacts match "{value}". Type a name manually.
+            </div>
+          )}
+          {!loading && !error && results.map((c) => (
             <div key={c.id} className="result" onMouseDown={() => { onSelect(c); setOpen(false); }}>
               <strong>{c.name}</strong>
             </div>

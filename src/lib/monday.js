@@ -1,7 +1,7 @@
 'use strict';
 
 const API_URL = 'https://api.monday.com/v2';
-const API_VERSION = '2024-10';
+const API_VERSION = '2025-04';
 
 class MondayClient {
   constructor({ token, fetchImpl = globalThis.fetch } = {}) {
@@ -92,30 +92,6 @@ class MondayClient {
       { id: [String(itemId)] }
     );
     return data.items && data.items[0];
-  }
-
-  async searchItemsByName(boardId, term) {
-    const data = await this.query(
-      `query ($boardId: [ID!], $term: CompareValue!) {
-        items_page_by_column_values(
-          board_id: $boardId,
-          columns: [{ column_id: "name", compare_value: $term, operator: contains_text }],
-          limit: 20
-        ) {
-          items {
-            id
-            name
-            column_values { id type text value }
-          }
-        }
-      }`,
-      { boardId: String(boardId), term: [term] }
-    ).catch(async () => {
-      const items = await this.listBoardItems(boardId);
-      const lower = term.toLowerCase();
-      return { items_page_by_column_values: { items: items.filter((i) => i.name.toLowerCase().includes(lower)) } };
-    });
-    return (data.items_page_by_column_values && data.items_page_by_column_values.items) || [];
   }
 
   async createItem({ boardId, itemName, columnValues, createLabelsIfMissing = false }) {
