@@ -7,6 +7,7 @@ const fs = require('fs');
 const { MondayClient } = require('./lib/monday');
 const { getStorage } = require('./lib/storage');
 const { loadConfig } = require('./lib/config');
+const { getMondayApiToken } = require('./lib/secrets');
 
 const productsRoute = require('./routes/products');
 const ordersRoute = require('./routes/orders');
@@ -17,15 +18,6 @@ const installRoute = require('./routes/install');
 const webhooksRoute = require('./routes/webhooks');
 const queueRoute = require('./routes/queue');
 
-function getMondayToken(req) {
-  return (
-    req.get('x-monday-token') ||
-    req.get('authorization') ||
-    process.env.MONDAY_API_TOKEN ||
-    ''
-  );
-}
-
 async function buildApp({ storage: storageOverride } = {}) {
   const app = express();
   app.use(express.json({ limit: '1mb' }));
@@ -35,8 +27,9 @@ async function buildApp({ storage: storageOverride } = {}) {
   app.use(async (req, _res, next) => {
     req.storage = storage;
     req.cfg = await loadConfig(storage);
-    const token = getMondayToken(req);
-    if (token) req.monday = new MondayClient({ token });
+    req.sessionToken = req.get('x-monday-token') || null;
+    const apiToken = await getMondayApiToken();
+    if (apiToken) req.monday = new MondayClient({ token: apiToken });
     next();
   });
 
@@ -44,8 +37,12 @@ async function buildApp({ storage: storageOverride } = {}) {
 
   app.use('/api', (req, res, next) => {
     if (!req.monday) {
-      return res.status(401).json({
-        error: 'monday API token unavailable — set MONDAY_API_TOKEN secret or pass x-monday-token header'
+      return res.status(503).json({
+        error:
+          'MONDAY_API_TOKEN is not set on this monday code app. Run: ' +
+          'mapps code:secret -m set -k MONDAY_API_TOKEN -v <your-token> ' +
+          '(personal access token from Admin → Developer → My access tokens). ' +
+          'Then redeploy with `mapps code:push`.'
       });
     }
     next();
@@ -75,7 +72,16 @@ async function buildApp({ storage: storageOverride } = {}) {
 
   app.use((err, _req, res, _next) => {
     console.error('[error]', err.stack || err.message);
-    res.status(500).json({ error: err.message || 'internal error' });
+    const msg = err.message || 'internal error';
+    if (/HTTP 401/.test(msg) || /NOT_AUTHENTICATED/.test(msg)) {
+      return res.status(401).json({
+        error:
+          'monday rejected the API token (Not authenticated). The token in MONDAY_API_TOKEN is invalid or revoked. ' +
+          'Generate a new one at Admin → Developer → My access tokens, then run: ' +
+          'mapps code:secret -m set -k MONDAY_API_TOKEN -v <new-token>'
+      });
+    }
+    res.status(500).json({ error: msg });
   });
 
   return app;
