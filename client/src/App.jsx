@@ -5,7 +5,7 @@ import NewOrder from './views/NewOrder.jsx';
 import History from './views/History.jsx';
 import ConfigView from './views/Config.jsx';
 import Toast from './components/Toast.jsx';
-import { IconCatalog, IconPlus, IconHistory, IconSettings, IconCheck, IconAlert, IconUser } from './components/Icons.jsx';
+import { IconCatalog, IconPlus, IconHistory, IconSettings, IconCheck, IconAlert } from './components/Icons.jsx';
 import { getCurrentUser } from './lib/api.js';
 
 const ROUTES = [
@@ -50,19 +50,6 @@ export default function App() {
     navigate('history');
   }
 
-  const placeholderNames = new Set(['', '?', 'Loading…', 'Local user', 'Stock Catalog user', 'Unknown']);
-  const isLoadingActor = !actor || actor.name === 'Loading…';
-  const hasRealName = actor?.name && !placeholderNames.has(actor.name);
-  const initials = hasRealName
-    ? actor.name
-        .split(/\s+/)
-        .map((s) => s[0])
-        .filter((c) => c && /[A-Za-z0-9]/.test(c))
-        .slice(0, 2)
-        .join('')
-        .toUpperCase()
-    : '';
-
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -74,16 +61,7 @@ export default function App() {
           </div>
         </div>
 
-        <div className="user-chip">
-          <div className="avatar">
-            {initials || <IconUser width={14} height={14} />}
-          </div>
-          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {isLoadingActor ? 'Loading…' : (actor?.name || 'Stock Catalog user')}
-          </div>
-        </div>
-
-        <nav className="nav">
+        <nav className="nav" style={{ marginTop: 24 }}>
           {ROUTES.map((r) => {
             const Icon = r.icon;
             return (
