@@ -3,22 +3,24 @@
   "version": "1.0.0",
   "description": "Private monday.com app for End of Life Essentials: Custom Object portal for merchandise stock and orders, with bidirectional sync to existing boards and a Stock Movements audit board.",
   "private": true,
+  "main": "index.js",
   "engines": {
     "node": ">=20"
   },
-  "workspaces": [
-    "server",
-    "client"
-  ],
   "scripts": {
-    "test": "npm test --workspace server",
-    "build:client": "npm run build --workspace client",
-    "build:server": "npm run build --workspace server",
-    "dev:server": "npm run dev --workspace server",
-    "dev:client": "npm run dev --workspace client",
+    "start": "node index.js",
+    "dev": "node --watch index.js",
+    "test": "node --test 'test/*.test.js'",
+    "build:client": "npm install --prefix client && npm run build --prefix client",
+    "dev:client": "npm install --prefix client && npm run dev --prefix client",
     "dryrun": "node scripts/dryrun.js",
     "deploy:client": "npm run build:client && cd client && mapps code:push -c -d dist",
-    "deploy:server": "cd server && mapps code:push"
+    "deploy:server": "mapps code:push"
+  },
+  "dependencies": {
+    "@mondaycom/apps-sdk": "3.0.10",
+    "express": "^4.19.2",
+    "ulid": "^2.3.0"
   },
   "overrides": {
     "@tootallnate/once": "^3.0.1",

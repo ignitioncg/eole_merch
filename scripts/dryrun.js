@@ -25,15 +25,15 @@
 const path = require('path');
 const fs = require('fs');
 
-const SERVER = path.join(__dirname, '..', 'server');
-const { MondayClient } = require(path.join(SERVER, 'src/lib/monday'));
-const { InMemoryStorage } = require(path.join(SERVER, 'src/lib/storage'));
-const { DEFAULTS, mergeConfig } = require(path.join(SERVER, 'src/lib/config'));
-const { inventoryItemToProduct } = require(path.join(SERVER, 'src/lib/productMapping'));
-const { planInitialSync } = require(path.join(SERVER, 'src/lib/initialSync'));
-const { submitOrder } = require(path.join(SERVER, 'src/lib/orderSubmission'));
-const { planReverseSync } = require(path.join(SERVER, 'src/lib/reverseSync'));
-const { setOriginMarker } = require(path.join(SERVER, 'src/lib/syncGuard'));
+const ROOT = path.join(__dirname, '..');
+const { MondayClient } = require(path.join(ROOT, 'src/lib/monday'));
+const { InMemoryStorage } = require(path.join(ROOT, 'src/lib/storage'));
+const { DEFAULTS, mergeConfig } = require(path.join(ROOT, 'src/lib/config'));
+const { inventoryItemToProduct } = require(path.join(ROOT, 'src/lib/productMapping'));
+const { planInitialSync } = require(path.join(ROOT, 'src/lib/initialSync'));
+const { submitOrder } = require(path.join(ROOT, 'src/lib/orderSubmission'));
+const { planReverseSync } = require(path.join(ROOT, 'src/lib/reverseSync'));
+const { setOriginMarker } = require(path.join(ROOT, 'src/lib/syncGuard'));
 
 const args = process.argv.slice(2);
 const noFixtures = args.includes('--no-fixtures');

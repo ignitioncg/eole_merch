@@ -49,39 +49,42 @@ board.
 
 ## Folder layout
 
+The backend lives at the repo root so monday code can launch
+`/workspace/index.js` without any `-d` gymnastics. The React portal
+lives in `client/` as a separate deployable.
+
 ```
 app.json                  monday app manifest (features + webhooks)
-package.json              workspace root
+package.json              backend deps + scripts (no workspaces)
+index.js                  monday code entry — mounts at /workspace/index.js
+src/
+  app.js                  Express bootstrap + middleware
+  routes/                 products, orders, movements, contacts, config,
+                          install, webhooks, queue
+  lib/
+    config.js             defaults + storage-backed config CRUD
+    monday.js             single GraphQL client wrapper
+    matcher.js            name normalisation + Levenshtein
+    status.js             status transition logic
+    productMapping.js     inventory item → Product, Product → orders column
+    movements.js          buildMovementPayload (Stock Movements board write)
+    deduction.js          order submission planner (pure)
+    installer.js          creates Reorder Point + Last Movement columns
+    initialSync.js        idempotent first-install sync
+    reverseSync.js        board-edit → Product update plan
+    sync.js               buildInventoryColumnUpdate, buildOrderColumnPayload
+    syncGuard.js          TTL'd loop-guard markers
+    orderSubmission.js    end-to-end order submit orchestration
+    storage.js            monday code Storage client + InMemory for tests
+test/                     node --test suite (matcher, status, movements,
+                          deduction, syncGuard, initialSync, productMapping,
+                          sync)
 client/                   React (Vite) portal — deployed to monday CDN
   src/
     App.jsx               router + layout
     views/                Catalog, NewOrder, History, ProductDetail, Config
     components/           StatusPill, Toast
     lib/                  API wrapper + formatters
-server/                   monday code backend (Express)
-  src/
-    index.js              app entry
-    app.js                Express bootstrap + middleware
-    routes/               products, orders, movements, contacts, config,
-                          install, webhooks, queue
-    lib/
-      config.js           defaults + storage-backed config CRUD
-      monday.js           single GraphQL client wrapper
-      matcher.js          name normalisation + Levenshtein
-      status.js           status transition logic
-      productMapping.js   inventory item → Product, Product → orders column
-      movements.js        buildMovementPayload (Stock Movements board write)
-      deduction.js        order submission planner (pure)
-      installer.js        creates Reorder Point + Last Movement columns
-      initialSync.js      idempotent first-install sync
-      reverseSync.js      board-edit → Product update plan
-      sync.js             buildInventoryColumnUpdate, buildOrderColumnPayload
-      syncGuard.js        TTL'd loop-guard markers
-      orderSubmission.js  end-to-end order submit orchestration
-      storage.js          monday code Storage client + InMemory for tests
-  test/                   node --test suite (matcher, status, movements,
-                          deduction, syncGuard, initialSync, productMapping,
-                          sync)
 scripts/
   dryrun.js               Run all three validation steps against fixtures
                           (or live data with --no-fixtures)
@@ -142,45 +145,39 @@ MONDAY_API_TOKEN=<your-token> node scripts/dryrun.js --no-fixtures
 The frontend dev server proxies `/api/...` to the backend on :8080.
 
 ```bash
-# terminal 1
-MONDAY_API_TOKEN=<your-token> npm run dev:server
+# terminal 1 — backend
+MONDAY_API_TOKEN=<your-token> npm run dev
 
-# terminal 2
+# terminal 2 — frontend
 npm run dev:client
 # open http://localhost:5173
 ```
 
 ## Deploy
 
-The frontend and backend deploy as two separate `mapps code:push` calls.
-**Important:** the backend must be pushed from inside `server/` so the
-`server/package.json` is the deployable root — if you push from the repo
-root, monday code can't find a runnable `package.json` (the workspace
-config at the root has no `main`/`start`) and the container fails with
-`MODULE_NOT_FOUND`, `requireStack: []`.
+The backend lives at the repo root; the frontend lives in `client/`.
+Two `mapps code:push` calls and you're done.
 
 ```bash
-# 1. Push the backend (from inside server/)
-npm run deploy:server
-# expands to: cd server && mapps code:push
+# 1. Push the backend — repo root IS the deployable
+mapps code:push -i <APP_VERSION_ID>
+# or via npm: npm run deploy:server -- -i <APP_VERSION_ID>
 
-# 2. Build and push the frontend (from inside client/)
-npm run deploy:client
-# expands to: npm run build:client && cd client && mapps code:push -c -d dist
+# 2. Build and push the frontend
+npm run deploy:client -- -i <APP_VERSION_ID>
+# expands to: npm install --prefix client && npm run build --prefix client \
+#             && cd client && mapps code:push -c -d dist
 
-# 3. Set the runtime token used by webhooks/cron contexts
+# 3. Set the runtime token used by webhooks / cron contexts
 mapps code:secret -m set -k MONDAY_API_TOKEN -v <your-token>
 
 # 4. Promote the draft version
 mapps app:promote
 ```
 
-If you prefer running `mapps` directly:
-
-```bash
-cd server && mapps code:push                          # backend
-cd client && npm run build && mapps code:push -c -d dist   # frontend
-```
+monday code mounts your push at `/workspace/` and unconditionally runs
+`node /workspace/index.js`. Because `index.js` lives at the repo root,
+this Just Works — there's no `-d` flag and no `cd` to remember.
 
 ## App configuration
 
@@ -314,22 +311,17 @@ posts an item update on the linked Inventory board item:
 ## Troubleshooting
 
 ### Deployment fails with `Cannot find module '/workspace/index.js'`
-monday code's container mounts your push at `/workspace/` and runs
+monday code mounts your push at `/workspace/` and runs
 `node /workspace/index.js` — it does **not** honor `package.json#main`.
-Two things must be true:
+This repo's `index.js` lives at the repo root specifically so this works
+without any `-d` flag. If you see this error, the most likely cause is
+that you pushed from a parent of this repo (so the upload's root has no
+`index.js`). Push from the repo root itself:
 
-1. The file `index.js` must exist at the **root of what you pushed**
-   (this repo's `server/index.js` plays that role).
-2. You must push from inside `server/`, so `server/` is the deployable
-   root:
-   ```bash
-   cd server
-   mapps code:push -i <APP_VERSION_ID>
-   ```
-   `npm run deploy:server -- -i <APP_VERSION_ID>` does this for you.
-
-Pushing from the repo root uploads the workspace `package.json` (which
-has no entry) — the container then can't find `/workspace/index.js`.
+```bash
+cd /path/to/eole_merch
+mapps code:push -i <APP_VERSION_ID>
+```
 
 ### Reverse-sync is firing but nothing changes in the Catalog
 1. Check `mapps code:logs --live` for `[reverse-sync] skipped: <reason>`
