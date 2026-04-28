@@ -1,85 +1,142 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Movements } from '../lib/api.js';
-import { formatDate, formatNumber } from '../lib/format.js';
+import EmptyState from '../components/EmptyState.jsx';
+import Banner from '../components/Banner.jsx';
+import { SkeletonRows } from '../components/Skeleton.jsx';
+import { IconHistory, IconRefresh } from '../components/Icons.jsx';
+import { formatNumber } from '../lib/format.js';
 
 const REASON_OPTIONS = [
-  { value: '', label: 'All reasons' },
-  { value: 'Order Placed', label: 'Order Placed' },
-  { value: 'New Shipment', label: 'New Shipment' },
-  { value: 'Stocktake Adjustment', label: 'Stocktake Adjustment' },
-  { value: 'Manual Correction', label: 'Manual Correction' },
-  { value: 'Initial Sync', label: 'Initial Sync' }
+  { value: '', label: 'All reasons', cls: '' },
+  { value: 'Order Placed', label: 'Orders', cls: 'order_placed' },
+  { value: 'New Shipment', label: 'Shipments', cls: 'new_shipment' },
+  { value: 'Stocktake Adjustment', label: 'Stocktake', cls: 'stocktake_adjustment' },
+  { value: 'Manual Correction', label: 'Corrections', cls: 'manual_correction' },
+  { value: 'Initial Sync', label: 'Initial sync', cls: 'initial_sync' }
 ];
 
-export default function History({ filterProductId }) {
+const REASON_TO_CLS = {
+  'Order Placed': 'order_placed',
+  'New Shipment': 'new_shipment',
+  'Stocktake Adjustment': 'stocktake_adjustment',
+  'Manual Correction': 'manual_correction',
+  'Initial Sync': 'initial_sync'
+};
+
+export default function History({ filterProductId, clearProductFilter }) {
   const [movements, setMovements] = useState([]);
   const [loading, setLoading] = useState(true);
   const [reason, setReason] = useState('');
-  const [productId, setProductId] = useState(filterProductId || '');
+  const [error, setError] = useState(null);
 
-  useEffect(() => {
-    setProductId(filterProductId || '');
-  }, [filterProductId]);
-
-  useEffect(() => {
+  const load = () => {
     setLoading(true);
-    Movements.list({ productId: productId || undefined, reason: reason || undefined })
-      .then((r) => setMovements(r.movements))
+    Movements.list({ productId: filterProductId || undefined, reason: reason || undefined })
+      .then((r) => { setMovements(r.movements); setError(null); })
+      .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [productId, reason]);
+  };
+
+  useEffect(load, [filterProductId, reason]);
+
+  const grouped = useMemo(() => {
+    const out = new Map();
+    for (const m of movements) {
+      const day = (m.movementAt || '').slice(0, 10) || 'Unknown';
+      if (!out.has(day)) out.set(day, []);
+      out.get(day).push(m);
+    }
+    return [...out.entries()];
+  }, [movements]);
 
   return (
     <div>
       <div className="page-header">
         <div>
-          <h1>Movement history</h1>
-          <div className="sub">{movements.length} movements</div>
+          <h1>History</h1>
+          <div className="sub">{loading ? 'Loading…' : `${movements.length} movement${movements.length === 1 ? '' : 's'}`}</div>
+        </div>
+        <div className="page-actions">
+          <button className="btn ghost sm" onClick={load} aria-label="Refresh">
+            <IconRefresh width={14} height={14} /> Refresh
+          </button>
         </div>
       </div>
 
-      <div className="toolbar">
-        <select value={reason} onChange={(e) => setReason(e.target.value)}>
-          {REASON_OPTIONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
-        </select>
-        {productId && (
-          <button className="btn ghost" onClick={() => setProductId('')}>Clear product filter</button>
-        )}
+      {filterProductId && (
+        <Banner kind="info">
+          Filtered to one product.
+          <button className="btn ghost sm" style={{ marginLeft: 12 }} onClick={clearProductFilter}>
+            Clear product filter
+          </button>
+        </Banner>
+      )}
+
+      <div className="toolbar" style={{ marginBottom: 16 }}>
+        <div className="chip-row">
+          {REASON_OPTIONS.map((r) => (
+            <button
+              key={r.value}
+              className={`chip ${reason === r.value ? 'active' : ''}`}
+              onClick={() => setReason(r.value)}
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {loading && <div className="empty-state">Loading…</div>}
-      {!loading && (
-        <table className="table">
-          <thead>
-            <tr>
-              <th>When</th>
-              <th>Movement</th>
-              <th>Reason</th>
-              <th style={{ textAlign: 'right' }}>Δ</th>
-              <th style={{ textAlign: 'right' }}>Before → After</th>
-              <th>Actor</th>
-              <th>Note</th>
-            </tr>
-          </thead>
-          <tbody>
-            {movements.map((m) => (
-              <tr key={m.movementId}>
-                <td>{formatDate(m.movementAt)}</td>
-                <td><strong>{m.itemName}</strong></td>
-                <td>{m.reason}</td>
-                <td style={{ textAlign: 'right' }} className={m.delta >= 0 ? 'delta-positive' : 'delta-negative'}>
-                  {m.delta > 0 ? '+' : ''}{m.delta}
-                </td>
-                <td style={{ textAlign: 'right' }}>{formatNumber(m.stockBefore)} → {formatNumber(m.stockAfter)}</td>
-                <td>{m.actor || '—'}</td>
-                <td style={{ color: 'var(--text-soft)' }}>{m.note || ''}</td>
-              </tr>
-            ))}
-            {movements.length === 0 && (
-              <tr><td colSpan={7} className="empty-state">No movements match the current filters.</td></tr>
-            )}
-          </tbody>
-        </table>
+      {error && <Banner kind="error">{error}</Banner>}
+
+      {loading ? (
+        <SkeletonRows rows={6} />
+      ) : movements.length === 0 ? (
+        <EmptyState
+          icon={<IconHistory width={28} height={28} />}
+          title="No movements yet"
+          description="Stock movements appear here whenever someone places an order or adjusts stock."
+        />
+      ) : (
+        <div className="table-wrap">
+          {grouped.map(([day, items]) => (
+            <div key={day}>
+              <div className="timeline-day">{prettyDay(day)}</div>
+              {items.map((m) => (
+                <div key={m.movementId} className={`movement-row ${REASON_TO_CLS[m.reason] || ''}`}>
+                  <div className="dot" />
+                  <div className="name">
+                    <strong>{m.itemName}</strong>
+                    <div className="meta">
+                      {m.reason}{m.actor ? ` · ${m.actor}` : ''}{m.note ? ` · "${m.note}"` : ''}
+                    </div>
+                  </div>
+                  <div className={`delta ${m.delta > 0 ? 'delta-positive' : m.delta < 0 ? 'delta-negative' : 'delta-zero'}`}>
+                    {m.delta > 0 ? '+' : ''}{m.delta}
+                  </div>
+                  <div className="stocks">
+                    {formatNumber(m.stockBefore)} → {formatNumber(m.stockAfter)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
+}
+
+function prettyDay(iso) {
+  if (!iso || iso === 'Unknown') return 'Unknown date';
+  try {
+    const d = new Date(iso + 'T00:00:00');
+    const today = new Date(); today.setHours(0,0,0,0);
+    const days = Math.floor((today - d) / 86400000);
+    if (days === 0) return 'Today';
+    if (days === 1) return 'Yesterday';
+    if (days < 7) return d.toLocaleDateString('en-AU', { weekday: 'long' });
+    return d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
+  } catch (_) {
+    return iso;
+  }
 }
