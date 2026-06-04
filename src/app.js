@@ -39,10 +39,11 @@ async function buildApp({ storage: storageOverride } = {}) {
     if (!req.monday) {
       return res.status(503).json({
         error:
-          'MONDAY_API_TOKEN is not set on this monday code app. Run: ' +
-          'mapps code:secret -m set -k MONDAY_API_TOKEN -v <your-token> ' +
-          '(personal access token from Admin → Developer → My access tokens). ' +
-          'Then redeploy with `mapps code:push`.'
+          'MONDAY_API_TOKEN is not set on this monday code app. Run one of:\n' +
+          '  mapps code:env    -m set -k MONDAY_API_TOKEN -v <your-token>\n' +
+          '  mapps code:secret -m set -k MONDAY_API_TOKEN -v <your-token>\n' +
+          'Generate the token at Admin → Developer → My access tokens. ' +
+          'The backend re-reads the value within 60 seconds — no redeploy required.'
       });
     }
     next();
@@ -74,11 +75,14 @@ async function buildApp({ storage: storageOverride } = {}) {
     console.error('[error]', err.stack || err.message);
     const msg = err.message || 'internal error';
     if (/HTTP 401/.test(msg) || /NOT_AUTHENTICATED/.test(msg)) {
+      const { getTokenSource } = require('./lib/secrets');
       return res.status(401).json({
         error:
-          'monday rejected the API token (Not authenticated). The token in MONDAY_API_TOKEN is invalid or revoked. ' +
-          'Generate a new one at Admin → Developer → My access tokens, then run: ' +
-          'mapps code:secret -m set -k MONDAY_API_TOKEN -v <new-token>'
+          'monday rejected the API token (Not authenticated). The token in MONDAY_API_TOKEN is invalid, revoked, or empty. ' +
+          'Verify it works at https://api.monday.com/v2 first, then run one of:\n' +
+          '  mapps code:env    -m set -k MONDAY_API_TOKEN -v <new-token>\n' +
+          '  mapps code:secret -m set -k MONDAY_API_TOKEN -v <new-token>\n' +
+          `Backend resolved token from: ${getTokenSource() || 'none'}.`
       });
     }
     res.status(500).json({ error: msg });
